@@ -9,6 +9,8 @@ import random
 import string
 import argparse
 
+
+client = boto3.client('ec2')
 ec2 = boto3.resource('ec2')
 # vpc = boto3.resource('vpc')
 deploy_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
@@ -19,6 +21,18 @@ def create_vpc():
     subnet = vpc.create_subnet(CidrBlock='10.1.0.0/16')
     gateway = ec2.create_internet_gateway()
     vpc.attach_internet_gateway(InternetGatewayId=gateway.id)
+
+    route_tables = client.describe_route_tables(
+        Filters=[{'Name': 'vpc-id', 'Values': [vpc.id]}]
+        )
+
+    rtb_id = route_tables['RouteTables'][0]['RouteTableId']
+
+    igw_route = client.create_route(
+        RouteTableId=rtb_id,
+        DestinationCidrBlock='0.0.0.0/0',
+        GatewayId=gateway.id,
+    )
 
     return vpc.id
 
