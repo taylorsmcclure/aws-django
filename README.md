@@ -16,11 +16,13 @@ This python3 script `aws-django.py` will do the following:
 ### Usage
 #### Requirements
 * AWS secret and access keys permitted to create/edit/update EC2 instances and VPC
+* AWS secret and access keys are assumed to be in ``~/.aws/credentials`; if not you can super-ceded them via optional arguments.
 
 1) Create a python virtual environment in this repository (Optional if you wish for packages to be available system-wide)
 ```
 virtualenv --python python3 .
 pip install -r requirements.txt
+python3 aws-django.py run
 ```
 
-TBD...
+2) Wait until you get instance information output to the terminal. Point your browser to the appropriate address. There you will see the django splash page
