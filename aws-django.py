@@ -18,6 +18,20 @@ deploy_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
 django_deployment_id = 'django-deployment-{}'.format(deploy_id)
 
 
+def load_user_data():
+    with open('django_user_data.sh', 'r') as f:
+        data = f.readlines()
+
+    return data
+
+
+def create_ec2_keypair():
+    keypair = client.create_key_pair(KeyName=django_deployment_id)
+    private_key = keypair['KeyMaterial']
+
+    return private_key
+
+
 def create_vpc():
     vpc = ec2.create_vpc(CidrBlock='10.1.0.0/16')
     subnet = vpc.create_subnet(CidrBlock='10.1.0.0/16')
@@ -61,6 +75,14 @@ def create_ec2(vpc_id, subnet_id):
              'ToPort': 22,
              'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}
         ])
+
+    # Load userdata to execute while launching
+    django_user_data = load_user_data()
+
+    # Load the pub key to use with deployment
+    private_key = create_ec2_keypair()
+
+
 
     instance = ec2.create_instances(
         ImageId='ami-1b791862',
@@ -106,17 +128,23 @@ def create_ec2(vpc_id, subnet_id):
 
 
 def _create_keypair():
+    # TODO: Don't think I have time to implement
+    # https://stackoverflow.com/a/9795584
     pass
 
 
 def main(action, access_key, secret_access_key, region):
 
+    print(create_ec2_keypair())
+
+    '''
     if action == 'run':
         vpc_id, subnet_id = create_vpc()
         create_ec2(vpc_id, subnet_id)
     else:
         print('Not a supported action')
         os.exit(1)
+    '''
 
 
 parser = argparse.ArgumentParser(description='This script will provision an EC2 instance that will run the default installation of Django.')
