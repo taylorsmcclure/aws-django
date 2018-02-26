@@ -9,7 +9,6 @@ import boto3
 import random
 import string
 import argparse
-# import OpenSSL
 
 
 client = boto3.client('ec2')
@@ -20,7 +19,7 @@ django_deployment_id = 'django-deployment-{}'.format(deploy_id)
 
 def load_user_data():
     with open('django_user_data.sh', 'r') as f:
-        data = f.readlines()
+        data = f.read()
 
     return data
 
@@ -29,7 +28,14 @@ def create_ec2_keypair():
     keypair = client.create_key_pair(KeyName=django_deployment_id)
     private_key = keypair['KeyMaterial']
 
-    return private_key
+    pem_path = '.secrets/private_key-{}.pem'.format(django_deployment_id)
+    with open(pem_path, 'w') as f:
+        f.writelines(private_key)
+        f.close()
+
+    os.chmod(pem_path, 0o400)
+
+    return pem_path
 
 
 def create_vpc():
@@ -79,9 +85,8 @@ def create_ec2(vpc_id, subnet_id):
     # Load userdata to execute while launching
     django_user_data = load_user_data()
 
-    # Load the pub key to use with deployment
-    private_key = create_ec2_keypair()
-
+    # Create a new private/pub key on AWS then download it locally.
+    pem_path = create_ec2_keypair()
 
 
     instance = ec2.create_instances(
@@ -90,6 +95,8 @@ def create_ec2(vpc_id, subnet_id):
         MaxCount=1,
         InstanceType='t2.micro',
         SubnetId=subnet_id,
+        KeyName=django_deployment_id,
+        UserData=django_user_data,
         SecurityGroupIds=[
         sg_id
         ],
@@ -120,11 +127,20 @@ def create_ec2(vpc_id, subnet_id):
     # Allocate and associate EIP with instance
     instance[0].wait_until_running();
     try:
-        allocation = client.allocate_address(Domain='vpc')
-        response = client.associate_address(AllocationId=allocation['AllocationId'],
+        alloc_resp = client.allocate_address(Domain='vpc')
+        assoc_resp = client.associate_address(AllocationId=alloc_resp['AllocationId'],
                                          InstanceId=instance_id)
     except Exception as e:
         print(e)
+
+    pub_ip = alloc_resp['PublicIp']
+    return_message = '''
+                Connect to {0} using the following string in your terminal\n\n
+                ssh -i {1} ubuntu@{2}\n\n
+                To see the Django app point your browser to: http://{2}/
+                '''.format(instance_id, pem_path, pub_ip)
+
+    return return_message
 
 
 def _create_keypair():
@@ -135,16 +151,14 @@ def _create_keypair():
 
 def main(action, access_key, secret_access_key, region):
 
-    print(create_ec2_keypair())
+    # print(load_user_data())
 
-    '''
     if action == 'run':
         vpc_id, subnet_id = create_vpc()
-        create_ec2(vpc_id, subnet_id)
+        print(create_ec2(vpc_id, subnet_id))
     else:
         print('Not a supported action')
         os.exit(1)
-    '''
 
 
 parser = argparse.ArgumentParser(description='This script will provision an EC2 instance that will run the default installation of Django.')
