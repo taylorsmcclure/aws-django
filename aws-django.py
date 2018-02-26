@@ -29,7 +29,12 @@ def create_ec2_keypair():
     keypair = client.create_key_pair(KeyName=django_deployment_id)
     private_key = keypair['KeyMaterial']
 
-    return private_key
+    pem_path = '.secrets/private_key-{}.pem'.format(django_deployment_id)
+    with open(pem_path, 'w') as f:
+        f.writelines(private_key)
+        f.close()
+
+    os.chmod(pem_path, 0o400)
 
 
 def create_vpc():
@@ -79,9 +84,8 @@ def create_ec2(vpc_id, subnet_id):
     # Load userdata to execute while launching
     django_user_data = load_user_data()
 
-    # Load the pub key to use with deployment
-    private_key = create_ec2_keypair()
-
+    # Create a new private/pub key on AWS then download it locally.
+    create_ec2_keypair()
 
 
     instance = ec2.create_instances(
@@ -90,6 +94,7 @@ def create_ec2(vpc_id, subnet_id):
         MaxCount=1,
         InstanceType='t2.micro',
         SubnetId=subnet_id,
+        KeyName=django_deployment_id,
         SecurityGroupIds=[
         sg_id
         ],
