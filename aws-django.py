@@ -14,8 +14,8 @@ import argparse
 
 client = boto3.client('ec2')
 ec2 = boto3.resource('ec2')
-# vpc = boto3.resource('vpc')
 deploy_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+django_deployment_id = 'django-deployment-{}'.format(deploy_id)
 
 
 def create_vpc():
@@ -42,8 +42,8 @@ def create_ec2(vpc_id, subnet_id):
 
     # Create security group
     sg = client.create_security_group(
-        Description='django-deployment-{}'.format(deploy_id),
-        GroupName='django-deployment-{}'.format(deploy_id),
+        Description=django_deployment_id,
+        GroupName=django_deployment_id,
         VpcId=vpc_id,
     )
     sg_id = sg['GroupId']
@@ -70,6 +70,26 @@ def create_ec2(vpc_id, subnet_id):
         SubnetId=subnet_id,
         SecurityGroupIds=[
         sg_id
+        ],
+        TagSpecifications=[
+        {
+            'ResourceType': 'instance',
+            'Tags': [
+                {
+                    'Key': 'Name',
+                    'Value': django_deployment_id
+                },
+            ]
+        },
+        {
+            'ResourceType': 'volume',
+            'Tags': [
+                {
+                    'Key': 'Name',
+                    'Value': django_deployment_id
+                },
+            ]
+        }
         ])
 
     django_instance = instance[0]
