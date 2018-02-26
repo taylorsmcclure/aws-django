@@ -4,10 +4,12 @@
 
 
 import os
+import time
 import boto3
 import random
 import string
 import argparse
+# import OpenSSL
 
 
 client = boto3.client('ec2')
@@ -34,10 +36,53 @@ def create_vpc():
         GatewayId=gateway.id,
     )
 
-    return vpc.id
+    return vpc.id, subnet.id
 
-def create_ec2():
-    pass
+def create_ec2(vpc_id, subnet_id):
+
+    # Create security group
+    sg = client.create_security_group(
+        Description='django-deployment-{}'.format(deploy_id),
+        GroupName='django-deployment-{}'.format(deploy_id),
+        VpcId=vpc_id,
+    )
+    sg_id = sg['GroupId']
+
+    # Add rules
+    response = client.authorize_security_group_ingress(
+        GroupId=sg_id,
+        IpPermissions=[
+            {'IpProtocol': 'tcp',
+             'FromPort': 80,
+             'ToPort': 80,
+             'IpRanges': [{'CidrIp': '0.0.0.0/0'}]},
+            {'IpProtocol': 'tcp',
+             'FromPort': 22,
+             'ToPort': 22,
+             'IpRanges': [{'CidrIp': '0.0.0.0/0'}]}
+        ])
+
+    instance = ec2.create_instances(
+        ImageId='ami-1b791862',
+        MinCount=1,
+        MaxCount=1,
+        InstanceType='t2.micro',
+        SubnetId=subnet_id,
+        SecurityGroupIds=[
+        sg_id
+        ])
+
+    django_instance = instance[0]
+    instance_id = instance[0].id
+
+    # Allocate and associate EIP with instance
+    instance[0].wait_until_running();
+    try:
+        allocation = client.allocate_address(Domain='vpc')
+        response = client.associate_address(AllocationId=allocation['AllocationId'],
+                                         InstanceId=instance_id)
+    except Exception as e:
+        print(e)
 
 
 def _create_keypair():
@@ -46,21 +91,12 @@ def _create_keypair():
 
 def main(action, access_key, secret_access_key, region):
 
-    print(create_vpc())
-    '''
     if action == 'run':
-        create_vpc()
-
-        instance = ec2.create_instances(
-            ImageId='ami-1b791862',
-            MinCount=1,
-            MaxCount=1,
-            InstanceType='t2.micro')
-        print(instance[0].id)
+        vpc_id, subnet_id = create_vpc()
+        create_ec2(vpc_id, subnet_id)
     else:
-        print('Not a supported action.')
+        print('Not a supported action')
         os.exit(1)
-    '''
 
 
 parser = argparse.ArgumentParser(description='This script will provision an EC2 instance that will run the default installation of Django.')
